@@ -30,6 +30,7 @@ from ryu.ofproto import ofproto_v1_2
 from ryu.ofproto import ofproto_v1_3
 from ryu.ofproto import ofproto_v1_2_parser
 from ryu.ofproto import ofproto_v1_3_parser
+from ryu.tests import test_lib
 
 
 class Test_Parser_OFPMatch(unittest.TestCase):
@@ -215,8 +216,8 @@ def _add_tests():
                         if domask:
                             values = [(value, cls.generate_mask())
                                       for (cls, value)
-                                      in itertools.izip(clss, values)]
-                        d = dict(itertools.izip(keys, values))
+                                      in zip(clss, values)]
+                        d = dict(zip(keys, values))
                         mod = ofpp.__name__.split('.')[-1]
                         method_name = 'test_' + mod
                         if domask:
@@ -238,9 +239,7 @@ def _add_tests():
                         print('adding %s ...' % method_name)
                         f = functools.partial(_run, name=method_name,
                                               ofpp=ofpp, d=d, domask=domask)
-                        f.func_name = method_name
-                        f.__name__ = method_name
-                        cls = Test_Parser_OFPMatch
-                        setattr(cls, method_name, f)
+                        test_lib.add_method(Test_Parser_OFPMatch,
+                                            method_name, f)
 
 _add_tests()

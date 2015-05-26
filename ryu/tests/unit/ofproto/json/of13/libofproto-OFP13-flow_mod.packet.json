@@ -7,7 +7,6 @@
       "flags": 0, 
       "hard_timeout": 0, 
       "idle_timeout": 0, 
-      "importance": 39032, 
       "instructions": [
          {
             "OFPInstructionActions": {

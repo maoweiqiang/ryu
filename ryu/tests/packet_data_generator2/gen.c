@@ -16,12 +16,14 @@
  * limitations under the License.
  */
 
+#include <lib/learn.h>
 #include <lib/ofpbuf.h>
 #include <lib/ofp-actions.h>
 #include <lib/ofp-msgs.h>
 #include <lib/ofp-util.h>
 #include <lib/packets.h>
 
+#include <assert.h>
 #include <err.h>
 #include <stdio.h>
 
@@ -108,6 +110,22 @@ flow_mod(enum ofputil_protocol proto)
     struct ofpbuf acts;
     struct ofpact_ipv4 *a_set_field;
     struct ofpact_goto_table *a_goto;
+    char *error;
+
+    /*
+     * Taken from neutron OVS-agent,
+     * modified for OF>=1.3. (NXM -> OXM)
+     * NOTE(yamamoto): This needs to be writable.  learn_parse() modifies it.
+     */
+    char learn_args[] =
+        "table=99,"
+        "priority=1,"
+        "hard_timeout=300,"
+        "OXM_OF_VLAN_VID[0..11],"
+        "OXM_OF_ETH_DST[]=OXM_OF_ETH_SRC[],"
+        "load:0->OXM_OF_VLAN_VID[],"
+        "load:OXM_OF_TUNNEL_ID[]->OXM_OF_TUNNEL_ID[],"
+        "output:OXM_OF_IN_PORT[]";
 
     memset(&fm, 0, sizeof(fm));
     fm.command = OFPFC_ADD;
@@ -122,6 +140,8 @@ flow_mod(enum ofputil_protocol proto)
     ofpact_put_STRIP_VLAN(&acts);
     a_set_field = ofpact_put_SET_IPV4_DST(&acts);
     a_set_field->ipv4 = inet_addr("192.168.2.9");
+    error = learn_parse(learn_args, &acts);
+    assert(error == NULL);
     a_goto = ofpact_put_GOTO_TABLE(&acts);
     a_goto->table_id = 100;
 
@@ -174,23 +194,26 @@ struct protocol_version {
 #define P(v) {.name = "OFP" #v, .dir_name = "of" #v, \
               .version = OFP ## v ## _VERSION,}
 
-const struct protocol_version protocols[] = {
-    P(15),
-};
-
+const struct protocol_version p13 = P(13);
+const struct protocol_version p15 = P(15);
 
 struct message {
     const char *name;
     struct ofpbuf *(*gen)(enum ofputil_protocol);
+    const struct protocol_version **protocols;
 };
 
-#define M(m) {.name = #m, .gen = m,}
+#define M(m, p) {.name = #m, .gen = m, .protocols = p,}
 
 const struct message messages[] = {
-    M(packet_in),
-    M(flow_mod),
-    M(bundle_ctrl),
-    M(bundle_add),
+    M(packet_in,
+      ((const struct protocol_version *[]){&p13, &p15, NULL})),
+    M(flow_mod,
+      ((const struct protocol_version *[]){&p13, &p15, NULL})),
+    M(bundle_ctrl,
+      ((const struct protocol_version *[]){&p15, NULL})),
+    M(bundle_add,
+      ((const struct protocol_version *[]){&p15, NULL})),
 };
 
 #if !defined(__arraycount)
@@ -203,19 +226,24 @@ main(int argc, char *argv[])
     struct ofpbuf *buf;
     unsigned int i, j;
 
-    for (j = 0; j < __arraycount(protocols); j++) {
-        const struct protocol_version * const p = &protocols[j];
-        const enum ofputil_protocol proto =
-            ofputil_protocol_from_ofp_version(p->version);
+    for (i = 0; i < __arraycount(messages); i++) {
+        const struct message * const m = &messages[i];
+        char name[255];
 
-        for (i = 0; i < __arraycount(messages); i++) {
-            const struct message * const m = &messages[i];
-            char name[255];
+        for (j = 0;; j++) {
+            const struct protocol_version * const p = m->protocols[j];
+
+            if (p == NULL) {
+                break;
+            }
+            const enum ofputil_protocol proto =
+                ofputil_protocol_from_ofp_version(p->version);
 
             buf = (*m->gen)(proto);
             snprintf(name, sizeof(name),
                 "../packet_data/%s/libofproto-%s-%s.packet",
                 p->dir_name, p->name, m->name);
+            printf("generating %s ...\n", name);
             clear_xid(buf);
             dump_message(name, buf);
             ofpbuf_delete(buf);

@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-#
-# Copyright (C) 2013 Nippon Telegraph and Telephone Corporation.
-# Copyright (C) 2013 YAMAMOTO Takashi <yamamoto at valinux co jp>
+# Copyright (C) 2013-2015 Nippon Telegraph and Telephone Corporation.
+# Copyright (C) 2013-2015 YAMAMOTO Takashi <yamamoto at valinux co jp>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -128,7 +126,8 @@ class Test_rpc(unittest.TestCase):
     def test_0_call_long(self):
         c = rpc.Client(self._client_sock)
         obj = 0xffffffffffffffff  # max value for msgpack
-        assert isinstance(obj, long)
+        _long = int if six.PY3 else long
+        assert isinstance(obj, _long)
         result = c.call("resp", [obj])
         assert result == obj
         assert isinstance(result, type(obj))
